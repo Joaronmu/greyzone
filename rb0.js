@@ -1,0 +1,4 @@
+
+window.addEventListener("error",function(e){var d=document.getElementById("errbox")||(function(){var x=document.createElement("div");x.id="errbox";x.style.cssText="position:fixed;left:0;top:0;right:0;z-index:9999;background:#300;color:#fcc;font:13px monospace;white-space:pre-wrap;padding:10px;max-height:50%;overflow:auto";(document.body||document.documentElement).appendChild(x);return x;})();d.textContent+="
+[ERR] "+(e.message||e.error)+" @"+(e.filename||"")+":"+e.lineno;});window.addEventListener("unhandledrejection",function(e){var d=document.getElementById("errbox")||(function(){var x=document.createElement("div");x.id="errbox";x.style.cssText="position:fixed;left:0;top:0;right:0;z-index:9999;background:#300;color:#fcc;font:13px monospace;white-space:pre-wrap;padding:10px;max-height:50%;overflow:auto";(document.body||document.documentElement).appendChild(x);return x;})();d.textContent+="
+[REJ] "+((e.reason&&(e.reason.stack||e.reason.message))||e.reason);});

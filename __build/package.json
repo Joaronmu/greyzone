@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "esbuild": "^0.28.1",
+    "three": "^0.160.0"
+  }
+}

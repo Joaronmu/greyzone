@@ -1,0 +1,71 @@
+import struct, zlib
+import numpy as np
+PATH="C:/Users/零零/Downloads/Firing Rifle.fbx"
+data=open(PATH,"rb").read()
+version=struct.unpack_from("<I",data,23)[0]; USE64=version>=7500; HDR=27
+def u(off,n=4): return struct.unpack_from("<Q",data,off)[0] if n==8 else struct.unpack_from("<I",data,off)[0]
+class N:
+    __slots__=("ch","props","name","end")
+    def __init__(s): s.ch=[];s.props=[];s.name=b"";s.end=0
+def psz(tc,off):
+    if tc=="Y":return 2
+    if tc=="C":return 1
+    if tc in "IF":return 4
+    if tc in "DL":return 8
+    if tc in "RS":return 4+u(off)
+    if tc in "fidbl":return 12+struct.unpack_from("<III",data,off)[2]
+    return 0
+def propval(tc,off):
+    if tc=="Y":return struct.unpack_from("<h",data,off)[0]
+    if tc=="C":return data[off]!=0
+    if tc=="I":return struct.unpack_from("<i",data,off)[0]
+    if tc=="F":return struct.unpack_from("<f",data,off)[0]
+    if tc=="D":return struct.unpack_from("<d",data,off)[0]
+    if tc=="L":return struct.unpack_from("<q",data,off)[0]
+    if tc in "RS":
+        ln=u(off);return data[off+4:off+4+ln]
+    if tc in "fidbl":
+        a,e,c=struct.unpack_from("<III",data,off);return data[off+12:off+12+c]
+    return None
+def rn(off):
+    if USE64: eo,np_,pl=struct.unpack_from("<QQQ",data,off);off+=24
+    else: eo,np_,pl=struct.unpack_from("<III",data,off);off+=12
+    nl=data[off];off+=1;nm=data[off:off+nl];off+=nl
+    n=N();n.name=nm;n.end=eo
+    for _ in range(np_):
+        tc=chr(data[off]);off+=1;v=propval(tc,off);n.props.append((tc,v));off+=psz(tc,off)
+    while off<eo:
+        pe=u(off,8 if USE64 else 4)
+        if pe==0:break
+        c=rn(off);n.ch.append(c);off=c.end
+    return n
+top=[];off=HDR
+while off<len(data):
+    pe=u(off,8 if USE64 else 4)
+    if pe==0:break
+    n=rn(off);top.append(n);off=n.end
+objs=next(t for t in top if t.name==b"Objects")
+def arr(node,key):
+    for cc in node.ch:
+        if cc.name==key and cc.props:
+            raw=cc.props[0][1]
+            try:raw=zlib.decompress(raw)
+            except:pass
+            return np.frombuffer(raw,dtype='<f8')
+    return None
+def prop_str(p):
+    if not p or p[0] not in ("S",):return None
+    s=p[1].decode("utf-8","replace")
+    if "\x00" in s:s=s.split("\x00",1)[0]
+    return s
+cnt=0
+for c in objs.ch:
+    if c.name==b"Deformer" and len(c.props)>=3 and prop_str(c.props[2])=="Cluster":
+        nm=prop_str(c.props[1])
+        has_tl=any(x.name==b"TransformLink" for x in c.ch)
+        has_t=any(x.name==b"Transform" for x in c.ch)
+        if cnt<8:
+            tl=arr(c,b"TransformLink")
+            print(nm, "TL" if has_tl else "-", "T" if has_t else "-", (np.round(tl[12:15],2) if tl is not None else None))
+        cnt+=1
+print("total clusters:",cnt)

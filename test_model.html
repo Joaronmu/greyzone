@@ -1,0 +1,61 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>模型验证</title>
+<style>body{margin:0;background:#222;color:#eee;font:14px sans-serif}#i{position:fixed;top:6px;left:8px;z-index:9}canvas{display:block}</style>
+</head><body>
+<div id="i">加载中…</div>
+<script src="three.min.js"></script>
+<script>
+const err=(m)=>{document.getElementById('i').textContent='ERR: '+m;document.title='ERR:'+m};
+window.addEventListener('error',e=>err(e.message));
+fetch('player_model.bin').then(r=>r.arrayBuffer()).then(ab=>{
+  const dv=new DataView(ab); let o=0;
+  const magic=String.fromCharCode(dv.getUint8(0),dv.getUint8(1),dv.getUint8(2),dv.getUint8(3)); o=4;
+  if(magic!=='PM3D')return err('bad magic '+magic);
+  const nclu=dv.getUint32(o,true);o+=4;
+  const ntri=dv.getUint32(o,true);o+=4;
+  const texlen=dv.getUint32(o,true);o+=4;
+  const pos=new Float32Array(ab,o,nclu*3); o+=nclu*12;
+  const nrm=new Float32Array(ab,o,nclu*3); o+=nclu*12;
+  const uv =new Float32Array(ab,o,nclu*2); o+=nclu*8;
+  const idx=new Uint32Array(ab,o,ntri*3); o+=ntri*12;
+  const texBytes=new Uint8Array(ab,o,texlen);
+  const tex=new THREE.DataTexture?null:null;
+  const blob=new Blob([texBytes],{type:'image/png'});
+  const url=URL.createObjectURL(blob);
+  new THREE.TextureLoader().load(url,(tex)=>{
+    tex.flipY=false; tex.colorSpace=THREE.SRGBColorSpace;
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+    g.setAttribute('normal',new THREE.BufferAttribute(nrm,3));
+    g.setAttribute('uv',new THREE.BufferAttribute(uv,2));
+    g.setIndex(new THREE.BufferAttribute(idx,1));
+    const mat=new THREE.MeshStandardMaterial({map:tex,roughness:0.7,metalness:0.0,side:THREE.DoubleSide});
+    const mesh=new THREE.Mesh(g,mat);
+    // bbox to center
+    g.computeBoundingBox(); const bb=g.boundingBox; const ctr=bb.getCenter(new THREE.Vector3());
+    mesh.position.sub(ctr); mesh.position.y-=(bb.min.y-ctr.y); // feet near 0
+    // wireframe overlay
+    const wf=new THREE.LineSegments(new THREE.WireframeGeometry(g),new THREE.LineBasicMaterial({color:0x00ffff,transparent:true,opacity:0.08}));
+    mesh.add(wf);
+    // scene
+    const scene=new THREE.Scene(); scene.background=new THREE.Color(0x1a1a22);
+    scene.add(new THREE.GridHelper(200,40,0x444455,0x2a2a33));
+    scene.add(new THREE.AmbientLight(0xffffff,0.55));
+    const dl=new THREE.DirectionalLight(0xffffff,1.1); dl.position.set(60,120,80); scene.add(dl);
+    const dl2=new THREE.DirectionalLight(0x88aaff,0.4); dl2.position.set(-80,60,-40); scene.add(dl2);
+    const grp=new THREE.Group(); grp.add(mesh); scene.add(grp);
+    // camera
+    const W=window.innerWidth,H=window.innerHeight;
+    const cam=new THREE.PerspectiveCamera(45,W/H,1,2000);
+    bb.getCenter(ctr); const sz=bb.getSize(new THREE.Vector3()); const rad=Math.max(sz.x,sz.y,sz.z)*0.8;
+    cam.position.set(rad*1.6, rad*1.4, rad*1.8); cam.lookAt(0,rad*0.5,0);
+    const rend=new THREE.WebGLRenderer({antialias:true}); rend.setSize(W,H); rend.setPixelRatio(2);
+    document.body.appendChild(rend.domElement);
+    document.getElementById('i').textContent='顶点:'+nclu+' 三角面:'+ntri+'  贴图:'+tex.image.width+'x'+tex.image.height+'  (自动旋转，可拖动)';
+    let yaw=0; let dragging=false,px=0,py=0,pitch=0.4;
+    document.addEventListener('mousedown',e=>{dragging=true;px=e.clientX;py=e.clientY});
+    document.addEventListener('mouseup',()=>dragging=false);
+    document.addEventListener('mousemove',e=>{if(!dragging)return;yaw-=(e.clientX-px)*0.01;pitch=Math.min(1.4,Math.max(-0.5,pitch-(e.clientY-py)*0.01));px=e.clientX;py=e.clientY});
+    function rt(){yaw+=0.004;const d=rad*2.2;cam.position.set(Math.sin(yaw)*d,rad*0.6+pitch*rad*2,Math.cos(yaw)*d);cam.lookAt(0,rad*0.5,0);rend.render(scene,cam);requestAnimationFrame(rt)}rt();
+  },undefined,e=>err('tex load '+e));
+}).catch(e=>err('fetch '+e));
+</script></body></html>
